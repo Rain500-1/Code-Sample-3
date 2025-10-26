@@ -1,0 +1,299 @@
+local ReplicatedStorage = game:GetService('ReplicatedStorage') -- getting the replicated storage service
+local Players = game:GetService('Players') -- getting the players service
+local Debris = game:GetService('Debris')
+local Sound_Service = game:GetService('SoundService')
+
+local Remote_Folder = ReplicatedStorage:WaitForChild('Remotes')
+local Voting_Remote = Remote_Folder['VotingEvent']
+
+local Building_Folder = game.Workspace:WaitForChild('Buildings') --This'll get the folder that'll store the buildings after waiting for it to load
+local Artillery_Folder = game.Workspace:WaitForChild('ArtilleryFolder')
+local Map_Folder = ReplicatedStorage['MapFolder']
+
+local Availablemaps = { -- simple table that will store the *available* buildings names and will also store two other tables that will store the votes!
+
+	'Harbor';
+
+	'RobloxHq';
+	
+	PlayersVoted1 = {
+		
+		-- here is where players usernames (votes will be stored) for the first map
+
+	};
+	
+	PlayersVoted2 = {
+		
+		-- here is where players usernames (votes will be stored) for the second map
+		
+	};
+	
+	Sounds = {
+		
+		Map_Voting_Music = 'rbxassetid://86335096116258';
+		
+		Battle_Music = 'rbxassetid://72203686695361';
+	};
+
+}
+
+
+local debounce = false --this will be used as a cooldown to prevent any mistakes like voting twice for example
+local Map_VoteTime = 5 --we can modify this to change the time for the voting to end
+local Delay_Time = 1.5 --will be used to delay the time when the sound plays
+local function PlaySound(soundID)
+	
+	task.delay(Delay_Time,function() --how this works is everything inside this function will be delayed but everything outside of the function will not be affected by delay time
+		
+		if debounce == false then
+			debounce = true
+
+			local Music_Sound = Instance.new('Sound') --making a new sound
+			Music_Sound.Name = 'Music_Sound' --naming it
+			Music_Sound.Parent = Sound_Service --we'll then put it into the sound service
+			Music_Sound.Playing = true -- set the playing boolean to true so it will automatically play when inserted
+			Music_Sound.Looped = true -- set the loop boolean to true to loop the sound/music
+			Music_Sound.SoundId = soundID --set the sound id to the one passed in the PlaySound function
+			Music_Sound.Volume = 2 -- now we just set the volume
+
+			print('Playing Music!')
+
+			for _,pos in pairs(Sound_Service:GetChildren()) do --for loop that goes through everything in the sound service
+				if pos:IsA('Sound') then --now we'll detect if the object is a sound.
+					if pos ~= Music_Sound then -- we'll also make sure the object we are detecting isnt the sound we recently added
+						if pos.SoundId == Music_Sound.SoundId then --now if the object's soundid is the same as the soundid from the sound we recently added, we'll delete the sound we added to make sure the music doesn't cut off and start over
+							Debris:AddItem(Music_Sound,0)
+
+						else -- so if the object's soundid is not the same as the soundid from the sound we recently added then we'll remove the object instead.
+							Debris:AddItem(pos,0)
+
+							print('New Music!')
+						end
+					end
+				end
+			end	
+
+			task.wait(0.1)
+			debounce = false
+		end	
+	end)
+end
+
+local function Spawnmap(map)
+	if Building_Folder:FindFirstChild(Availablemaps[1]) or Building_Folder:FindFirstChild(Availablemaps[2]) then
+		return
+	end -- thisll detect if theres already a map in the previous buildingfolder and if there is, itll return and not continue the code
+	
+	if debounce == false then
+		debounce = true
+
+		for _,artillery in pairs(Artillery_Folder:GetChildren()) do --how this works is, the for loop will look for any possible artillery still in the folder to remove
+			if artillery then Debris:AddItem(artillery,0) end --if we do find any artillery we'll add it to the debris service to get rid of it
+		end
+
+		local newMap = Map_Folder:WaitForChild(map):Clone() --how this works is now, we generate the new map using information passed from the previous serverscript
+		newMap.Parent = Building_Folder --parenting it to the buildingfolder we previously got
+		
+		PlaySound(Availablemaps['Sounds']['Battle_Music'])
+		
+		for _,parts in pairs(newMap:GetChildren()) do --getting every part in the map we want to clone using a for loop
+			if parts:IsA('Model') then--detecting if the parts class is a model and if it is we will continue the code moving on
+				if parts.Name == 'Artillery' then
+					parts.Parent = Artillery_Folder --if the name of the part is artillery we'll parent it to the artilleryfolder we previously got
+				end 
+				if parts.Name == 'Harbor' then
+					parts.Parent = Building_Folder --if the name of the part is Harbor we'll parent it to the buildings folder we previously got
+				end 
+				if newMap.Name == 'Harbor' then
+					Debris:AddItem(newMap,1) --now, if the name of the map we cloned is Harbor we'll remove it using the debris service, why im doing this is because i dont want any empty models sitting around in the building folder which may interrupt code
+				end 
+			end
+		end		
+
+		task.wait(1)
+		debounce = false
+	end
+end
+
+Voting_Remote.OnServerEvent:Connect(function(Player, buttons)--how this works is we respond to the event that we fired from the previous local script with information to work with like the button that was activated/clicked
+	
+	local PLAYER_NAME = Player.Name --getting the players username
+
+	local Map1 = buttons.Parent:WaitForChild('Map1') --these two variables are going to get the buttons, map1 is a button that returns a different map than the map2
+	local Map2 = buttons.Parent:WaitForChild('Map2')
+
+	local Votes1 = Map1['Votes'] --same thing here but instead of maps these are just going to be numbervalues that we are getting
+	local Votes2 = Map2['Votes']
+	
+	print(PLAYER_NAME..' Has Put In A Vote')
+	
+	PlaySound(Availablemaps['Sounds']['Map_Voting_Music'])
+
+	if buttons.Name == 'Map1' then --this is going to check if the button pressed is map1
+
+		if table.find(Availablemaps['PlayersVoted1'], PLAYER_NAME) then
+			return
+		end --how this works is the table will look/find for the player that voted, if that same player is in the table then code will not cotinue
+		
+		if table.find(Availablemaps['PlayersVoted2'], PLAYER_NAME) then --same thing here but instead of not continuing the code, since hes on the other table he has switched votes to map1
+
+			if debounce == false then
+				debounce = true
+
+				local index = table.find(Availablemaps['PlayersVoted2'], PLAYER_NAME) -- finding the player that wants to switch votes and putting him into a variable
+				table.remove(Availablemaps['PlayersVoted2'], index) --now we are removing the same player from the table/vote
+				table.insert(Availablemaps['PlayersVoted1'], PLAYER_NAME) -- continuing on we will move that player into the other table/vote
+				
+				print(PLAYER_NAME..' Has Switched Votes To Map #1')
+				
+				task.wait(0.1)
+				debounce = false
+			end
+		else
+
+			if debounce == false then
+				debounce = true
+
+				table.insert(Availablemaps['PlayersVoted1'], PLAYER_NAME) -- how this works is if the player isnt in ANY table (so neutral), thisll just insert them into the vote automatically.
+				
+				print(PLAYER_NAME..' Has Voted Map #1')
+				
+				task.wait(0.1)
+				debounce = false
+			end
+		end
+		
+		Map2['VoteLabel'].Text = 'Votes: '..#Availablemaps['PlayersVoted2'] --updating what the text will say
+		Map1['VoteLabel'].Text = 'Votes: '..#Availablemaps['PlayersVoted1']
+
+		Votes1.Value = #Availablemaps['PlayersVoted1']
+		Votes2.Value = #Availablemaps['PlayersVoted2']
+
+		task.wait(Map_VoteTime) -- a task.wait so players have the time to vote
+		print('Picking Map!')
+		if #Availablemaps['PlayersVoted1'] > #Availablemaps['PlayersVoted2'] then -- how this works is we are comparing both maps's votes, if the first map has more votes than the second map then the first map will be chosen
+
+			Spawnmap(Availablemaps[1]) --using the module script we past required, we will now be using it for the map generation
+			
+			print('Generating '..Availablemaps[1])
+			
+		elseif #Availablemaps['PlayersVoted2'] > #Availablemaps['PlayersVoted1'] then -- how this works is we are comparing both maps's votes, if the second map has more votes than the first map then the second map will be chosen
+
+			Spawnmap(Availablemaps[2])--using the module script we past required, we will now be using it for the map generation
+			
+			print('Generating '..Availablemaps[2])
+			
+		elseif #Availablemaps['PlayersVoted1'] == #Availablemaps['PlayersVoted2'] then -- how this works is, once we compare both maps's votes and both the maps's votes are tied then we'll just choose a random map lol
+
+			local choiceIndex = math.random(1,#Availablemaps) --getting a random number between 1 and the number of maps we have available in our past table
+			local choice = Availablemaps[choiceIndex] --now this will pick a random map utilizing the past variable we made (choiceindex )
+
+			print('Random Map!')
+			Spawnmap(choice)--using the module script we past required, we will now be using it for the map generation
+			
+			print('Generating '..choice)
+
+			print(choice)
+		end
+
+		print(#Availablemaps['PlayersVoted1'], #Availablemaps['PlayersVoted2'])
+		
+		table.clear(Availablemaps['PlayersVoted1']) --once maps have been voted the tables/votes will be cleared/emptied using table.clear
+		table.clear(Availablemaps['PlayersVoted2'])
+		
+		print('Clearing All Votes!')
+
+		Map2['VoteLabel'].Text = 'Votes: '..#Availablemaps['PlayersVoted2'] --updating what the text will say
+		Map1['VoteLabel'].Text = 'Votes: '..#Availablemaps['PlayersVoted1']
+
+		Votes1.Value = #Availablemaps['PlayersVoted1']
+		Votes2.Value = #Availablemaps['PlayersVoted2']
+
+	elseif buttons.Name == 'Map2' then --this is going to check if the button pressed is map2 and then the code will run just the same as ive explained above
+		if table.find(Availablemaps['PlayersVoted2'], PLAYER_NAME) then
+			return
+		end
+		
+		if table.find(Availablemaps['PlayersVoted1'], PLAYER_NAME) then
+			if debounce == false then
+				debounce = true
+
+				local index = table.find(Availablemaps['PlayersVoted1'], PLAYER_NAME)
+				table.remove(Availablemaps['PlayersVoted1'], index)
+				table.insert(Availablemaps['PlayersVoted2'], PLAYER_NAME)
+				
+				print(PLAYER_NAME..' Has Switched Votes To Map #2')
+
+				task.wait(0.1)
+				debounce = false
+			end
+		else
+
+			if debounce == false then
+				debounce = true
+
+				table.insert(Availablemaps['PlayersVoted2'], PLAYER_NAME)
+
+				task.wait(0.1)
+				debounce = false
+			end
+		end
+		Map2['VoteLabel'].Text = 'Votes: '..#Availablemaps['PlayersVoted2']
+		Map1['VoteLabel'].Text = 'Votes: '..#Availablemaps['PlayersVoted1']
+
+		Votes1.Value = #Availablemaps['PlayersVoted1']
+		Votes2.Value = #Availablemaps['PlayersVoted2']
+
+		task.wait(Map_VoteTime)
+		if #Availablemaps['PlayersVoted1'] > #Availablemaps['PlayersVoted2'] then
+
+			Spawnmap(Availablemaps[1])
+			
+			print('Generating '..Availablemaps[1])
+
+		elseif #Availablemaps['PlayersVoted2'] > #Availablemaps['PlayersVoted1'] then
+
+			Spawnmap(Availablemaps[2])
+			
+			print('Generating '..Availablemaps[2])
+
+		elseif #Availablemaps['PlayersVoted1'] == #Availablemaps['PlayersVoted2'] then
+
+			local choiceIndex = math.random(1,#Availablemaps)
+			local choiceKey = Availablemaps[choiceIndex]
+
+			print('Random Map!')
+			Spawnmap(choiceKey)
+
+			print('Generating '..choiceKey)
+		end
+
+		table.clear(Availablemaps['PlayersVoted1']) --once maps have been voted the tables will be cleared
+		table.clear(Availablemaps['PlayersVoted2'])
+		
+		print('Clearing All Votes!')
+
+		Map2['VoteLabel'].Text = 'Votes: '..#Availablemaps['PlayersVoted2'] --updating what the text will say
+		Map1['VoteLabel'].Text = 'Votes: '..#Availablemaps['PlayersVoted1']
+
+		Votes1.Value = #Availablemaps['PlayersVoted1']
+		Votes2.Value = #Availablemaps['PlayersVoted2']
+	end	
+
+	Players.PlayerRemoving:Connect(function(plr)
+		
+		local index1 = table.find(Availablemaps['PlayersVoted1'], plr.Name) -- finding the potential player that left the server
+		local index2 = table.find(Availablemaps['PlayersVoted2'], plr.Name)
+		
+		if index1 or index2 then
+			
+			table.remove(Availablemaps['PlayersVoted1'], index1) --now we are removing the player from the table if hes in it
+			table.remove(Availablemaps['PlayersVoted2'], index2)	
+			
+			print('Removing player from Table/s')
+			
+		else
+			return
+		end
+	end)
+end)
